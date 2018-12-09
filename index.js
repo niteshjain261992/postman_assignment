@@ -2,6 +2,13 @@
 const fs = require('fs');
 
 const directory_structure = {};
+let position = 0;
+
+// to check name of item and directory only have number, alphabet and `-`, `_`
+function isValid(name) {
+    const pattern = /^[a-zA-Z0-9_-]+$/;
+    return name.match(pattern);
+}
 
 // delete all files and folders
 function deleteFolderRecursive(path=`${__dirname}/root`) {
@@ -52,15 +59,17 @@ function getDirectoryPath(dir="root", path=`${__dirname}/root`, directories=[] /
     if (!directory_structure[dir]) return;
 
     directories.push(dir);
-    if (directory_structure[dir] === 'root') return `${path}/${directories.reverse().join("/")}`;
-    else return getDirectoryPath(directory_structure[dir], path, directories);
+    if (directory_structure[dir].path === 'root') return `${path}/${directories.reverse().join("/")}`;
+    else return getDirectoryPath(directory_structure[dir].path, path, directories);
 }
 
 function createItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
+        // name of item only have alphabets, numbers and `-`, `_`.
+        if (!isValid(name)) throw new Error(original_command);
         const dir = (command[1]) ? command[1] : "root";
-        directory_structure[name] = dir;
+        directory_structure[name] = { type: "item", path: dir, position: ++position };
 
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
         fs.open(path, 'w', (err, fd)=> {
@@ -74,8 +83,10 @@ function createItem(command, original_command) {
 function createDir(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
+        // name of directory only have alphabets, numbers and `-`, `_`.
+        if (!isValid(name)) throw new Error(original_command);
         const dir = (command[1]) ? command[1] : "root";
-        directory_structure[name] = dir;
+        directory_structure[name] = { type: "dir", path: dir, position: ++position };
 
         const path = `${getDirectoryPath(dir)}/${name}`;
 
@@ -107,11 +118,10 @@ function createCommand(command, original_command) {
 function deleteItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
-        const dir = directory_structure[name];
+        const dir = directory_structure[name].path;
 
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
         delete directory_structure[name];
-
         fs.unlink(path, (err)=> {
             if (err) throw new Error(original_command);
             resolve();
@@ -142,12 +152,24 @@ function moveItem(command, original_command) {
         const file_name = command[0];
         const folder_name = command[1];
 
-        const old_file_path = `${getDirectoryPath(directory_structure[file_name])}/${file_name}.txt`;
+        const old_file_path = `${getDirectoryPath(directory_structure[file_name].path)}/${file_name}.txt`;
         const new_file_path = `${getDirectoryPath(folder_name)}/${file_name}.txt`;
 
         fs.rename(old_file_path, new_file_path, (err)=> {
             if (err) throw new Error(original_command);
-            directory_structure[file_name] = folder_name;
+
+            let new_position = ++position;
+            if (command[2]) {
+                switch (command[2]) {
+                    case 'before':
+                        new_position = parseFloat(`${directory_structure[command[3]].position - 1}.${new_position}`);
+                        break;
+                    case 'after':
+                        new_position = parseFloat(`${directory_structure[command[3]].position}.${new_position}`);
+                        break;
+                }
+            }
+            directory_structure[file_name] = { type: "item", path: folder_name, position: new_position };
             resolve();
         });
     });
@@ -164,7 +186,7 @@ function moveDir(command, original_command) {
         fs.rename(old_file_path, new_file_path, (err)=> {
             if (err) throw new Error(original_command);
 
-            directory_structure[file_name] = folder2;
+            directory_structure[folder1] = { type: "dir", path: folder2, position: ++position };
             resolve();
         });
 
@@ -210,6 +232,48 @@ function runCommand(command) {
     });
 }
 
+function getAllFolderFiles(dir) {
+    const files = {};
+
+    Object.keys(directory_structure).forEach((struct)=> {
+        if (directory_structure[struct].path === dir && directory_structure[struct].type === "item")
+            files[directory_structure[struct].position] = struct;
+        else if (directory_structure[struct].path === dir && directory_structure[struct].type === "dir")
+            files[parseFloat(`-${directory_structure[struct].position}`)] = struct;
+    });
+    const returnValues = [];
+    Object.keys(files).sort().forEach((file)=> {
+        returnValues.push(files[file]);
+    });
+
+    return returnValues;
+}
+
+// to get output file string
+function getOutput(output="root\n", dir='root', tab=1 /* to maintain hierarchy in output file*/) {
+    const files = getAllFolderFiles(dir);
+    files.forEach((file)=> {
+        if (directory_structure[file].type === "dir") {
+            let i = 0;
+            while (i !== tab) {
+                output += "\t";
+                i++;
+            }
+
+            output += "dir " + getOutput(`${file}\n`, file, ++i);
+        } else {
+            let i = 0;
+            while(i !== tab) {
+                output += "\t";
+                i++;
+            }
+
+            output += `item ${file}\n`;
+        }
+    });
+    return output;
+}
+
 // start function
 (async ()=> {
     try {
@@ -220,10 +284,15 @@ function runCommand(command) {
         for(let i = 0; i < commands.length; i++) {
             await runCommand(commands[i]);
         }
-        console.log(directory_structure);
     } catch(e) {
         // Todo: handle error
     }
+
+    const output = getOutput();
+    console.log(output);
+    fs.writeFile('output.txt', output, 'utf8', (err)=> {
+        // do nothing
+    });
 })();
 
 
