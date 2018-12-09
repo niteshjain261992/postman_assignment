@@ -1,19 +1,19 @@
 # Directory Structure
 
-#Requirement
+### Requirement
     Nodejs : 8 version
     Mocha: to run test cases(5.2.0v)
     
-###Assumption
+### Assumption
     Input file is valid. If file is invalid code might break
     
-######Using this library you can 
+###### Using this library you can 
     1) Create item or directory
     2) remove directory or item
     3) move directory or item
     
     
-######Setup
+###### Setup
     const directoryStructure = require("directoryStructure");
     
     const structure = new directoryStructure(<options>);
@@ -23,14 +23,14 @@
         outputFile: <output file path>
         
         
-######To perform operations
+###### To perform operations
     structure.run();
     
     Note: this function returns promise
     
 
 
-######Example
+###### Example
     1) Input File: create item chocolate
                 create dir fruits
     
