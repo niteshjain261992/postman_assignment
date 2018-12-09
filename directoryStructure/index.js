@@ -1,7 +1,7 @@
 //dependencies
 const fs = require('fs');
 
-const directory_structure = {};
+let directory_structure = {};
 let position = 0;
 
 // to check name of item and directory only have number, alphabet and `-`, `_`
@@ -67,13 +67,13 @@ function createItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
         // name of item only have alphabets, numbers and `-`, `_`.
-        if (!isValid(name)) throw new Error(original_command);
+        if (!isValid(name)) return reject(original_command);
         const dir = (command[1]) ? command[1] : "root";
         directory_structure[name] = { type: "item", path: dir, position: ++position };
 
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
         fs.open(path, 'w', (err, fd)=> {
-            if (err) throw new Error(original_command);
+            if (err) return reject(original_command);
             fs.closeSync(fd);
             resolve();
         });
@@ -84,14 +84,14 @@ function createDir(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
         // name of directory only have alphabets, numbers and `-`, `_`.
-        if (!isValid(name)) throw new Error(original_command);
+        if (!isValid(name)) return reject(original_command);
         const dir = (command[1]) ? command[1] : "root";
         directory_structure[name] = { type: "dir", path: dir, position: ++position };
 
         const path = `${getDirectoryPath(dir)}/${name}`;
 
         fs.mkdir(path, { recursive: true }, (err)=> {
-            if (err) throw new Error(original_command);
+            if (err) return reject(original_command);
             resolve();
         });
     });
@@ -102,16 +102,20 @@ function createCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
 
         // switch case to handle item or directory creation
-        switch (command[0]) {
-            case 'item':
-                await createItem(command.splice(1, command.length), original_command);
-                break;
-            case 'dir':
-                await createDir(command.splice(1, command.length), original_command);
-                break;
-        }
+        try {
+            switch (command[0]) {
+                case 'item':
+                    await createItem(command.splice(1, command.length), original_command);
+                    break;
+                case 'dir':
+                    await createDir(command.splice(1, command.length), original_command);
+                    break;
+            }
 
-        resolve();
+            resolve();
+        } catch(e) {
+            reject(e);
+        }
     })
 }
 
@@ -123,7 +127,7 @@ function deleteItem(command, original_command) {
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
         delete directory_structure[name];
         fs.unlink(path, (err)=> {
-            if (err) throw new Error(original_command);
+            if (err) return reject(original_command);
             resolve();
         });
     });
@@ -133,17 +137,21 @@ function deleteCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
 
         // switch case to handle item or directory deletion
-        switch (command[0]) {
-            case 'item':
-                await deleteItem(command.splice(1, command.length), original_command);
-                break;
-            case 'dir':
-                const path = `${getDirectoryPath(command[1])}`;
-                deleteFolderRecursive(path);
-                break;
-        }
+        try {
+            switch (command[0]) {
+                case 'item':
+                    await deleteItem(command.splice(1, command.length), original_command);
+                    break;
+                case 'dir':
+                    const path = `${getDirectoryPath(command[1])}`;
+                    deleteFolderRecursive(path);
+                    break;
+            }
 
-        resolve();
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
     });
 }
 
@@ -156,7 +164,7 @@ function moveItem(command, original_command) {
         const new_file_path = `${getDirectoryPath(folder_name)}/${file_name}.txt`;
 
         fs.rename(old_file_path, new_file_path, (err)=> {
-            if (err) throw new Error(original_command);
+            if (err) return reject(original_command);
 
             let new_position = ++position;
             if (command[2]) {
@@ -184,7 +192,7 @@ function moveDir(command, original_command) {
         const new_file_path = `${getDirectoryPath(folder2)}/${folder1}`;
 
         fs.rename(old_file_path, new_file_path, (err)=> {
-            if (err) throw new Error(original_command);
+            if (err) return reject(original_command);
 
             directory_structure[folder1] = { type: "dir", path: folder2, position: ++position };
             resolve();
@@ -195,17 +203,20 @@ function moveDir(command, original_command) {
 
 function moveCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
+        try {
+            switch (command[0]) {
+                case 'item':
+                    await moveItem(command.splice(1, command.length), original_command);
+                    break;
+                case 'dir':
+                    await moveDir(command.splice(1, command.length), original_command);
+                    break;
+            }
 
-        switch (command[0]) {
-            case 'item':
-                await moveItem(command.splice(1, command.length), original_command);
-                break;
-            case 'dir':
-                await moveDir(command.splice(1, command.length), original_command);
-                break;
+            resolve();
+        } catch (e) {
+            reject(e);
         }
-
-        resolve();
     });
 }
 
@@ -213,22 +224,26 @@ function moveCommand(command, original_command) {
 function runCommand(command) {
     return new Promise(async (resolve, reject)=> {
         const splitCommand = command.split(" ");
+        try {
+            switch (splitCommand[0]) {
+                case 'create':
+                    await createCommand(splitCommand.splice(1, splitCommand.length), command);
+                    break;
+                case 'delete':
+                    await deleteCommand(splitCommand.splice(1, splitCommand.length), command);
+                    break;
+                case 'move':
+                    await moveCommand(splitCommand.splice(1, splitCommand.length), command);
+                    break;
+                default:
+                    // TODo: handle error
+            }
 
-        switch (splitCommand[0]) {
-            case 'create':
-                await createCommand(splitCommand.splice(1, splitCommand.length), command);
-                break;
-            case 'delete':
-                await deleteCommand(splitCommand.splice(1, splitCommand.length), command);
-                break;
-            case 'move':
-                await moveCommand(splitCommand.splice(1, splitCommand.length), command);
-                break;
-            default:
-                // TODo: handle error
+            resolve();
+        } catch (e) {
+            reject(e);
         }
 
-        resolve();
     });
 }
 
@@ -279,25 +294,33 @@ function getOutput(output="root\n", dir='root', tab=1 /* to maintain hierarchy i
 class DirectoryStructureCtrl {
 
     constructor(options={}) {
+        directory_structure = {};
+        position = 0;
         this.inputFilePath = (options.inputFile) ? options.inputFile : __dirname + '/../input.txt';
         this.outputFilePath = (options.outputFile) ? options.outputFile : __dirname + '/../output.txt';
     }
 
     run() {
         return new Promise(async (resolve, reject)=> {
-
+            const _this = this;
             await cleanRootDirectory();
             const input = await readInput.call(this);
             const commands = input.split("\n");
 
             for(let i = 0; i < commands.length; i++) {
-                await runCommand(commands[i]);
+                try {
+                    await runCommand(commands[i]);
+                } catch (e) {
+                    fs.writeFileSync(this.outputFilePath, `failed ${e}`, { encoding: 'utf8' });
+                    return reject();
+                }
             }
 
             const output = getOutput();
             fs.writeFile(this.outputFilePath, output, 'utf8', (err)=> {
-                // do nothing
+                resolve();
             });
+
 
         });
     }
@@ -308,7 +331,7 @@ module.exports = DirectoryStructureCtrl;
 
 // get all errors and store that in output.txt
 process.on('uncaughtException', (err)=> {
-    fs.writeFile('output.txt', `failed ${err.message}`, 'utf8', (err)=> {
+    fs.writeFile("output.txt", `failed ${err.message}`, 'utf8', (err)=> {
         // do nothing
     });
 });
