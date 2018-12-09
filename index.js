@@ -26,8 +26,10 @@ function deleteFolderRecursive(path=`${__dirname}/root`) {
 function cleanRootDirectory() {
     return new Promise((resolve, reject)=> {
         deleteFolderRecursive();
-        fs.mkdirSync(`${__dirname}/root`);
-        resolve();
+        fs.mkdir(`${__dirname}/root`, { recursive: true }, (err)=> {
+            if (err) throw err;
+            resolve();
+        });
     });
 }
 
@@ -36,8 +38,10 @@ function readInput() {
     return new Promise((resolve, reject)=> {
         //ToDO: check input file exists or not
         // todo: validate file
-        const input = fs.readFileSync(__dirname + '/input.txt', 'utf8');
-        resolve(input);
+        fs.readFile(__dirname + '/input.txt', { encoding: "utf8" }, (err, data)=> {
+            if (err) throw err;
+            resolve(data);
+        });
     });
 }
 
@@ -52,41 +56,47 @@ function getDirectoryPath(dir="root", path=`${__dirname}/root`, directories=[] /
     else return getDirectoryPath(directory_structure[dir], path, directories);
 }
 
-function createItem(command) {
+function createItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
         const dir = (command[1]) ? command[1] : "root";
         directory_structure[name] = dir;
 
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
-        fs.closeSync(fs.openSync(path, 'w'));
-        resolve();
+        fs.open(path, 'w', (err, fd)=> {
+            if (err) throw new Error(original_command);
+            fs.closeSync(fd);
+            resolve();
+        });
     });
 }
 
-function createDir(command) {
+function createDir(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
         const dir = (command[1]) ? command[1] : "root";
         directory_structure[name] = dir;
 
         const path = `${getDirectoryPath(dir)}/${name}`;
-        fs.mkdirSync(path);
-        resolve();
+
+        fs.mkdir(path, { recursive: true }, (err)=> {
+            if (err) throw new Error(original_command);
+            resolve();
+        });
     });
 }
 
 // function to create directory or item
-function createCommand(command) {
+function createCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
 
         // switch case to handle item or directory creation
         switch (command[0]) {
             case 'item':
-                await createItem(command.splice(1, command.length));
+                await createItem(command.splice(1, command.length), original_command);
                 break;
             case 'dir':
-                await createDir(command.splice(1, command.length));
+                await createDir(command.splice(1, command.length), original_command);
                 break;
         }
 
@@ -94,26 +104,28 @@ function createCommand(command) {
     })
 }
 
-function deleteItem(command) {
+function deleteItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const name = command[0];
         const dir = directory_structure[name];
 
         const path = `${getDirectoryPath(dir)}/${name}.txt`;
         delete directory_structure[name];
-        fs.unlinkSync(path);
 
-        resolve();
+        fs.unlink(path, (err)=> {
+            if (err) throw new Error(original_command);
+            resolve();
+        });
     });
 }
 
-function deleteCommand(command) {
+function deleteCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
 
         // switch case to handle item or directory deletion
         switch (command[0]) {
             case 'item':
-                await deleteItem(command.splice(1, command.length));
+                await deleteItem(command.splice(1, command.length), original_command);
                 break;
             case 'dir':
                 const path = `${getDirectoryPath(command[1])}`;
@@ -125,7 +137,7 @@ function deleteCommand(command) {
     });
 }
 
-function moveItem(command) {
+function moveItem(command, original_command) {
     return new Promise((resolve, reject)=> {
         const file_name = command[0];
         const folder_name = command[1];
@@ -133,13 +145,15 @@ function moveItem(command) {
         const old_file_path = `${getDirectoryPath(directory_structure[file_name])}/${file_name}.txt`;
         const new_file_path = `${getDirectoryPath(folder_name)}/${file_name}.txt`;
 
-        fs.renameSync(old_file_path, new_file_path);
-        directory_structure[file_name] = folder_name;
-        resolve()
+        fs.rename(old_file_path, new_file_path, (err)=> {
+            if (err) throw new Error(original_command);
+            directory_structure[file_name] = folder_name;
+            resolve();
+        });
     });
 }
 
-function moveDir(command) {
+function moveDir(command, original_command) {
     return new Promise((resolve, reject)=> {
         const folder1 = command[0];
         const folder2 = command[1];
@@ -147,22 +161,25 @@ function moveDir(command) {
         const old_file_path = `${getDirectoryPath(folder1)}`;
         const new_file_path = `${getDirectoryPath(folder2)}/${folder1}`;
 
-        fs.renameSync(old_file_path, new_file_path);
-        directory_structure[file_name] = folder2;
+        fs.rename(old_file_path, new_file_path, (err)=> {
+            if (err) throw new Error(original_command);
 
-        resolve();
+            directory_structure[file_name] = folder2;
+            resolve();
+        });
+
     });
 }
 
-function moveCommand(command) {
+function moveCommand(command, original_command) {
     return new Promise(async (resolve, reject)=> {
 
         switch (command[0]) {
             case 'item':
-                await moveItem(command.splice(1, command.length));
+                await moveItem(command.splice(1, command.length), original_command);
                 break;
             case 'dir':
-                await moveDir(command.splice(1, command.length));
+                await moveDir(command.splice(1, command.length), original_command);
                 break;
         }
 
@@ -177,13 +194,13 @@ function runCommand(command) {
 
         switch (splitCommand[0]) {
             case 'create':
-                await createCommand(splitCommand.splice(1, splitCommand.length));
+                await createCommand(splitCommand.splice(1, splitCommand.length), command);
                 break;
             case 'delete':
-                await deleteCommand(splitCommand.splice(1, splitCommand.length));
+                await deleteCommand(splitCommand.splice(1, splitCommand.length), command);
                 break;
             case 'move':
-                await moveCommand(splitCommand.splice(1, splitCommand.length));
+                await moveCommand(splitCommand.splice(1, splitCommand.length), command);
                 break;
             default:
                 // TODo: handle error
@@ -208,3 +225,11 @@ function runCommand(command) {
         // Todo: handle error
     }
 })();
+
+
+// get all errors and store that in output.txt
+process.on('uncaughtException', (err)=> {
+    fs.writeFile('output.txt', `failed ${err.message}`, 'utf8', (err)=> {
+        // do nothing
+    });
+});
