@@ -43,9 +43,9 @@ function cleanRootDirectory() {
 // read input file
 function readInput() {
     return new Promise((resolve, reject)=> {
-        //ToDO: check input file exists or not
+        if (!fs.existsSync(this.inputFilePath)) throw new Error("Input file not exists");
         // todo: validate file
-        fs.readFile(__dirname + '/input.txt', { encoding: "utf8" }, (err, data)=> {
+        fs.readFile(this.inputFilePath, { encoding: "utf8" }, (err, data)=> {
             if (err) throw err;
             resolve(data);
         });
@@ -275,25 +275,35 @@ function getOutput(output="root\n", dir='root', tab=1 /* to maintain hierarchy i
 }
 
 // start function
-(async ()=> {
-    try {
-        await cleanRootDirectory();
-        const input = await readInput();
-        const commands = input.split("\n");
 
-        for(let i = 0; i < commands.length; i++) {
-            await runCommand(commands[i]);
-        }
-    } catch(e) {
-        // Todo: handle error
+class DirectoryStructureCtrl {
+
+    constructor(options={}) {
+        this.inputFilePath = (options.inputFile) ? options.inputFile : __dirname + '/../input.txt';
+        this.outputFilePath = (options.outputFile) ? options.outputFile : __dirname + '/../output.txt';
     }
 
-    const output = getOutput();
-    console.log(output);
-    fs.writeFile('output.txt', output, 'utf8', (err)=> {
-        // do nothing
-    });
-})();
+    run() {
+        return new Promise(async (resolve, reject)=> {
+
+            await cleanRootDirectory();
+            const input = await readInput.call(this);
+            const commands = input.split("\n");
+
+            for(let i = 0; i < commands.length; i++) {
+                await runCommand(commands[i]);
+            }
+
+            const output = getOutput();
+            fs.writeFile(this.outputFilePath, output, 'utf8', (err)=> {
+                // do nothing
+            });
+
+        });
+    }
+}
+
+module.exports = DirectoryStructureCtrl;
 
 
 // get all errors and store that in output.txt
